@@ -1,0 +1,255 @@
+
+local party = {}
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+
+local function CheckClientorServer()
+	if RunService:IsClient() then
+		return "Client"
+		
+	elseif RunService:IsServer() then
+		return "Server"
+	end
+end
+
+
+function party.Create(player, password, partyname)
+	local clientorserver = CheckClientorServer()
+	if clientorserver == "Client" then
+		warn("Function cannot be called on a Client!")
+		return
+	end
+	
+	if player:IsA("Player") then		
+		if ReplicatedStorage:FindFirstChild("Parties") == nil then
+			local parties = Instance.new("Folder", ReplicatedStorage)
+			parties.Name = "Parties"
+		end
+		
+		if ReplicatedStorage.Parties:FindFirstChild(player.Name) == nil and player:FindFirstChild("InParty") == nil then
+			local partyfolder = Instance.new("Folder", ReplicatedStorage.Parties)
+			if partyname then
+				partyfolder.Name = partyname
+			else
+				partyfolder.Name = player.Name
+			end
+
+			local playervalue = Instance.new("ObjectValue", partyfolder)
+			playervalue.Name = "Owner"
+			playervalue.Value = player
+			
+			local inparty = Instance.new("ObjectValue", player)
+			inparty.Name = "InParty"
+			inparty.Value = playervalue
+
+			if password ~= nil then
+				partyfolder:SetAttribute("Password", password)
+			end
+		else
+			warn(player.Name.." is already in a party!")
+		end
+	else
+		warn(player.Name.." must be a Player!")
+	end
+	
+	if ReplicatedStorage.Parties:FindFirstChild(player.Name):FindFirstChild("SelectedWorld") == nil then
+		local SelectedWorld = Instance.new("StringValue", ReplicatedStorage.Parties:FindFirstChild(player.Name))
+		SelectedWorld.Name = "SelectedWorld"
+	end
+	
+end
+
+function party.JoinParty(player, password, partyname)
+	local clientorserver = CheckClientorServer()
+	if clientorserver == "Client" then
+		warn("Function cannot be called on a Client!")
+		return
+	end
+	
+	if partyname then
+		local partyfolder = ReplicatedStorage.Parties:FindFirstChild(partyname)
+
+		if partyfolder then
+			if partyfolder:GetAttribute("Password") then
+				if password then
+					if password == partyfolder:GetAttribute("Password") then
+						if ReplicatedStorage.Parties:FindFirstChild(player.Name) == nil and player:FindFirstChild("InParty") == nil then
+							local playervalue = Instance.new("ObjectValue", partyfolder)
+							playervalue.Name = "Member"
+							playervalue.Value = player
+							
+							local inparty = Instance.new("ObjectValue", player)
+							inparty.Name = "InParty"
+							inparty.Value = playervalue
+						else
+							warn(player.Name.." is already in a party!")
+						end
+					end
+				else
+					warn("Must enter a password!")
+				end
+			else
+				if ReplicatedStorage.Parties:FindFirstChild(player.Name) == nil and player:FindFirstChild("InParty") == nil then
+					local playervalue = Instance.new("ObjectValue", partyfolder)
+					playervalue.Name = "Member"
+					playervalue.Value = player
+					
+					local inparty = Instance.new("ObjectValue", player)
+					inparty.Name = "InParty"
+					inparty.Value = playervalue
+					for _, v in pairs(partyfolder:GetChildren()) do
+						if v.Name ~= "SelectedWorld" then
+							game.ReplicatedStorage.PartyUpdated:FireClient(v.Value)
+						end
+					end
+				else
+					warn(player.Name.." is already in a party!")
+				end
+			end
+		else
+			warn("Unable to find: "..partyname..". Try setting the partyname to the party owner's name!")
+		end
+	else
+		warn("Must enter a partyname!")
+	end
+end
+
+function party.LeaveParty(player)
+	local clientorserver = CheckClientorServer()
+	local partyfolder = ReplicatedStorage.Parties:FindFirstChild(player.Name)
+	
+	if clientorserver == "Client" then
+		warn("Function cannot be called on a Client!")
+		return
+	end
+	
+	if player then
+		if player:IsA("Player") then
+			if player:FindFirstChild("InParty") then
+				local playervalue = player.InParty.Value
+				
+				if playervalue.Name == "Owner" then
+					for _, v in pairs(partyfolder:GetChildren()) do
+						if v.Name ~= "SelectedWorld" then
+							game.ReplicatedStorage.PartyDestroyed:FireClient(v.Value,partyfolder.SelectedWorld.Value)
+							v.Value.InParty:Destroy()
+						end
+					end
+					game.ReplicatedStorage.Parties:FindFirstChild(player.Name):Destroy()
+				else
+					player.InParty:Destroy()
+					game.ReplicatedStorage.PartyDestroyed:FireClient(player)
+					
+				end
+			else
+				warn(player.." is not in a party.")
+			end
+		else
+			warn(player.." must be a player instance.")
+		end
+	else
+		warn("player is nil")
+	end
+end
+
+function party.GetPlayers(partyname)
+	local partymembers = {}
+	
+	if partyname then
+		local partyfolder = ReplicatedStorage.Parties:FindFirstChild(partyname)
+		
+		if partyfolder then
+			for _, v in pairs(partyfolder:GetChildren()) do
+				table.insert(partymembers, v)
+			end
+		else
+			warn("Unable to find: "..partyname..". Try setting the partyname to the party owner's name!")
+		end
+	else
+		warn("Must enter a partyname!")
+	end
+	
+	return partymembers
+end
+
+function party.GetPlayersTeleport(partyname)
+	local partymembers = {}
+
+	if partyname then
+		local partyfolder = ReplicatedStorage.Parties:FindFirstChild(partyname)
+
+		if partyfolder then
+			for _, v in pairs(partyfolder:GetChildren()) do
+				if v.Name ~= "SelectedWorld" then
+					table.insert(partymembers, v.Value)
+				end
+			end
+		else
+			warn("Unable to find: "..partyname..". Try setting the partyname to the party owner's name!")
+		end
+	else
+		warn("Must enter a partyname!")
+	end
+
+	return partymembers
+end
+
+function party.GetParties()
+	local parties = {}
+	
+	if ReplicatedStorage:FindFirstChild("Parties") then
+		for _, v in pairs(ReplicatedStorage.Parties:GetChildren()) do
+			table.insert(parties, v)
+		end
+	else
+		warn("No party found!")
+	end
+	
+	return parties
+end
+
+function party.UserLeave(player)
+	local clientorserver = CheckClientorServer()
+	
+	local partiesFolder = ReplicatedStorage:FindFirstChild("Parties")
+	if not partiesFolder then
+		return false
+	end
+
+	for _, party in pairs(partiesFolder:GetChildren()) do
+		for _, member in pairs(party:GetChildren()) do
+			if (member:IsA("ObjectValue") or member:IsA("ValueBase")) and member.Value == player then
+
+				local inPartyObj = player:FindFirstChild("InParty")
+				if inPartyObj then
+					inPartyObj:Destroy()
+				end
+
+				game.ReplicatedStorage.PartyDestroyed:FireClient(player)
+				member:Destroy()
+				
+				local hasMember = false
+				for _, v in pairs(party:GetChildren()) do
+					if v:IsA("ObjectValue") and (v.Name == "Owner" or v.Name == "Member") then
+						if v.Name ~= "SelectedWorld" then
+							game.ReplicatedStorage.PlayerLeave:FireClient(v.Value)
+							hasMember = true
+						end
+						break
+					end
+				end
+				if not hasMember then
+					party:Destroy()
+				end
+				return true
+			end
+		end
+	end
+
+	return false
+end
+
+return party
+
